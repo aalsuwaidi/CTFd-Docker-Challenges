@@ -73,6 +73,7 @@ class DockerChallengeTracker(db.Model):
     revert_time = db.Column("revert_time", db.Integer, index=True)
     instance_id = db.Column("instance_id", db.String(128), index=True)
     ports = db.Column('ports', db.String(128), index=True)
+    subdomains = db.Column('subdomains', db.String(128), index=True)
     host = db.Column('host', db.String(128), index=True)
 
 
@@ -80,6 +81,12 @@ class DockerConfigForm(BaseForm):
     id = HiddenField()
     hostname = StringField(
         "Docker Hostname", description="The Hostname/IP and Port of your Docker Server"
+    )
+    domain = StringField(
+        "Domain Name", description="The domain that will be used to host the challenges"
+    )
+    network = StringField(
+        "Network Name", description="The docker network that will be used with the reverse proxy"
     )
     tls_enabled = RadioField('TLS Enabled?')
     ca_cert = FileField('CA Cert')
@@ -122,6 +129,8 @@ def define_docker_admin(app):
             if len(client_cert) != 0: b.client_cert = client_cert
             if len(client_key) != 0: b.client_key = client_key
             b.hostname = request.form['hostname']
+            b.domain = request.form['domain']
+            b.network = request.form['network']
             b.tls_enabled = request.form['tls_enabled']
             if b.tls_enabled == "True":
                 b.tls_enabled = True
@@ -316,20 +325,36 @@ def create_container(docker, image, team, portbl):
     team = hashlib.md5(team.encode("utf-8")).hexdigest()[:10]
     container_name = "%s_%s" % (image.split(':')[1], team)
     assigned_ports = dict()
-    for i in needed_ports:
-        while True:
-            assigned_port = random.choice(range(30000, 60000))
-            if assigned_port not in portbl:
-                assigned_ports['%s/tcp' % assigned_port] = {}
-                break
-    ports = dict()
-    bindings = dict()
-    tmp_ports = list(assigned_ports.keys())
-    for i in needed_ports:
-        ports[i] = {}
-        bindings[i] = [{"HostPort": tmp_ports.pop()}]
-    headers = {'Content-Type': "application/json"}
-    data = json.dumps({"Image": image, "ExposedPorts": ports, "HostConfig": {"PortBindings": bindings}})
+    labels = dict()
+    subdomains = []
+    # If no domain is defined continue with the normal flow 
+    # TODO to handle better
+    if not docker.domain:
+        for i in needed_ports:
+            while True:
+                assigned_port = random.choice(range(30000, 60000))
+                if assigned_port not in portbl:
+                    assigned_ports['%s/tcp' % assigned_port] = {}
+                    break
+        ports = dict()
+        bindings = dict()
+        tmp_ports = list(assigned_ports.keys())
+        for i in needed_ports:
+            ports[i] = {}
+            bindings[i] = [{"HostPort": tmp_ports.pop()}]
+        headers = {'Content-Type': "application/json"}
+        data = json.dumps({"Image": image, "ExposedPorts": ports, "HostConfig": {"PortBindings": bindings}})
+    else:
+        for index, p in enumerate(needed_ports):
+            # TODO allow user to select different reverse proxies
+            label_prefix = "caddy_%d" % index
+            subdomain = "%s.%s" % (p.split("/")[0] + container_name.replace("_", "-"), docker.domain)
+            subdomains.append(subdomain)
+            # p is 80/tcp, need to split at / and select the port only
+            upstream = "{{upstreams %s}}" % p.split("/")[0]
+            labels[label_prefix] = subdomain
+            labels[label_prefix + ".reverse_proxy"] = upstream
+            data = json.dumps({"Image": image, "Labels": labels, "HostConfig": {"NetworkMode": docker.network}})
     if tls:
         r = requests.post(url="%s/containers/create?name=%s" % (URL_TEMPLATE, container_name), cert=CERT,
                       verify=False, data=data, headers=headers)
@@ -344,7 +369,7 @@ def create_container(docker, image, team, portbl):
         print(result)
         # name conflicts are not handled properly
         s = requests.post(url="%s/containers/%s/start" % (URL_TEMPLATE, result['Id']), headers=headers)
-    return result, data
+    return result, data, subdomains
 
 
 def delete_container(docker, instance_id):
@@ -585,16 +610,33 @@ class ContainerAPI(Resource):
         portsbl = get_unavailable_ports(docker)
         create = create_container(docker, container, session.name, portsbl)
         ports = json.loads(create[1])['HostConfig']['PortBindings'].values()
-        entry = DockerChallengeTracker(
-            team_id=session.id if is_teams_mode() else None,
-            user_id=session.id if not is_teams_mode() else None,
-            docker_image=container,
-            timestamp=unix_time(datetime.utcnow()),
-            revert_time=unix_time(datetime.utcnow()) + 300,
-            instance_id=create[0]['Id'],
-            ports=','.join([p[0]['HostPort'] for p in ports]),
-            host=str(docker.hostname).split(':')[0]
-        )
+        subdomains = create[2]
+        # If subdomains are defined
+        # TODO should subdomains go in the challengetracker model?
+        if len(subdomains) > 0:
+            entry = DockerChallengeTracker(
+                team_id=session.id if is_teams_mode() else None,
+                user_id=session.id if not is_teams_mode() else None,
+                docker_image=container,
+                timestamp=unix_time(datetime.utcnow()),
+                revert_time=unix_time(datetime.utcnow()) + 300,
+                instance_id=create[0]['Id'],
+                ports="",
+                subdomains=','.join(subdomains),
+                host=str(docker.hostname).split(':')[0]
+            )
+        else:
+            entry = DockerChallengeTracker(
+                team_id=session.id if is_teams_mode() else None,
+                user_id=session.id if not is_teams_mode() else None,
+                docker_image=container,
+                timestamp=unix_time(datetime.utcnow()),
+                revert_time=unix_time(datetime.utcnow()) + 300,
+                instance_id=create[0]['Id'],
+                ports=','.join([p[0]['HostPort'] for p in ports]),
+                subdomains="",
+                host=str(docker.hostname).split(':')[0]
+            )
         db.session.add(entry)
         db.session.commit()
         #db.session.close()

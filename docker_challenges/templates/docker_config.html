@@ -18,12 +18,32 @@
             <form method="post" accept-charset="utf-8" autocomplete="off" role="form" name='docker_config' class="form-horizontal" enctype="multipart/form-data">
                 <div class="form-group">
                     <label for="hostname-input">
-                        Hostname
+                        Docker Hostname
                     </label>
                     {% if config.hostname %}
                     <input class="form-control" type="text" name="hostname" id="hostname-input" placeholder="Ex: 10.10.10.10:2376" value='{{ config.hostname }}'/>
                     {% else %}
                     <input class="form-control" type="text" name="hostname" id="hostname-input" placeholder="Ex: 10.10.10.10:2376" />
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="domain-input">
+                        Domain
+                    </label>
+                    {% if config.domain %}
+                    <input class="form-control" type="text" name="domain" id="domain-input" placeholder="Ex: example.com" value='{{ config.domain }}'/>
+                    {% else %}
+                    <input class="form-control" type="text" name="domain" id="domain-input" placeholder="Ex: example.com" />
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="network-input">
+                        Docker Network
+                    </label>
+                    {% if config.network %}
+                    <input class="form-control" type="text" name="network" id="network-input" placeholder="Ex: caddy" value='{{ config.network }}'/>
+                    {% else %}
+                    <input class="form-control" type="text" name="network" id="network-input" placeholder="Ex: caddy" />
                     {% endif %}
                 </div>
                 <div class="form-group">

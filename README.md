@@ -1,3 +1,9 @@
+# What is this fork?
+This fork is to add support for automatically setting up a reverse proxy for web challenges. Currently, it is assumes you are using https://github.com/lucaslorentz/caddy-docker-proxy as your reverse proxy setup, but it can be extended to support others.
+
+It will give you the option to select the network and domain that you want to use for your challenges, and will automatically create the subdomain and container labels when creating the container.
+
+This is an initial release and there a few items marked as todo in the code, once they are completed a pull request will be made to merge the changes with the original repo.
 # CTFd Docker Plugin
 This plugin for CTFd will allow your competing teams/users to start dockerized images for presented challenges. It adds a challenge type "docker" that can be assigned a specific docker image/tag. A few notable requirements:
 

@@ -44,12 +44,22 @@ function get_docker_status(container) {
     $.get("/api/v1/docker_status", function(result) {
         $.each(result['data'], function(i, item) {
             if (item.docker_image == container) {
-                var ports = String(item.ports).split(',');
                 var data = '';
-                $.each(ports, function(x, port) {
-                    port = String(port)
-                    data = data + 'Host: ' + item.host + ' Port: ' + port + '<br />';
-                })
+                if (item.subdomains === "") {
+                    var ports = String(item.ports).split(',');
+                    $.each(ports, function(x, port) {
+                        port = String(port)
+                        data = data + 'Host: ' + item.host + ' Port: ' + port + '<br />';
+                    })
+                }
+                else {
+                    var subdomains = String(item.subdomains).split(',');
+                    $.each(subdomains, function(x, subdomain) {
+                        subdomain = String(subdomain)
+                        const sanitized = $("<p>").text(subdomain).text() 
+                        data = data + 'Url: ' + "<a href='" + sanitized + "'>" + sanitized + "</a>" + "<br />";
+                    })
+                }
                 $('#docker_container').html('<pre>Docker Container Information:<br />' + data + '<div class="mt-2" id="' + String(item.instance_id).substring(0,10) + '_revert_container"></div>');
                 var countDownDate = new Date(parseInt(item.revert_time) * 1000).getTime();
                 var x = setInterval(function() {
