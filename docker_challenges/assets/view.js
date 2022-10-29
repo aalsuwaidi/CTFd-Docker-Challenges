@@ -57,7 +57,7 @@ function get_docker_status(container) {
                     $.each(subdomains, function(x, subdomain) {
                         subdomain = String(subdomain)
                         const sanitized = $("<p>").text(subdomain).text() 
-                        data = data + 'Url: ' + "<a href='" + sanitized + "'>" + sanitized + "</a>" + "<br />";
+                        data = data + 'Url: ' + "<a href='https://" + sanitized + "'>" + sanitized + "</a>" + "<br />";
                     })
                 }
                 $('#docker_container').html('<pre>Docker Container Information:<br />' + data + '<div class="mt-2" id="' + String(item.instance_id).substring(0,10) + '_revert_container"></div>');

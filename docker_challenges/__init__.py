@@ -54,6 +54,8 @@ class DockerConfig(db.Model):
 	"""
     id = db.Column(db.Integer, primary_key=True)
     hostname = db.Column("hostname", db.String(64), index=True)
+    domain = db.Column("domain", db.String(64), default="", index=True)
+    network = db.Column("network", db.String(64), default="", index=True)
     tls_enabled = db.Column("tls_enabled", db.Boolean, default=False, index=True)
     ca_cert = db.Column("ca_cert", db.String(2200), index=True)
     client_cert = db.Column("client_cert", db.String(2000), index=True)
@@ -354,7 +356,8 @@ def create_container(docker, image, team, portbl):
             upstream = "{{upstreams %s}}" % p.split("/")[0]
             labels[label_prefix] = subdomain
             labels[label_prefix + ".reverse_proxy"] = upstream
-            data = json.dumps({"Image": image, "Labels": labels, "HostConfig": {"NetworkMode": docker.network}})
+        headers = {'Content-Type': "application/json"}
+        data = json.dumps({"Image": image, "Labels": labels, "HostConfig": {"NetworkMode": docker.network}})
     if tls:
         r = requests.post(url="%s/containers/create?name=%s" % (URL_TEMPLATE, container_name), cert=CERT,
                       verify=False, data=data, headers=headers)
@@ -607,9 +610,11 @@ class ContainerAPI(Resource):
             else:
                 DockerChallengeTracker.query.filter_by(user_id=session.id).filter_by(docker_image=container).delete()
             db.session.commit()
-        portsbl = get_unavailable_ports(docker)
+        try:
+            portsbl = get_unavailable_ports(docker)
+        except:
+            portsbl = []
         create = create_container(docker, container, session.name, portsbl)
-        ports = json.loads(create[1])['HostConfig']['PortBindings'].values()
         subdomains = create[2]
         # If subdomains are defined
         # TODO should subdomains go in the challengetracker model?
@@ -626,6 +631,7 @@ class ContainerAPI(Resource):
                 host=str(docker.hostname).split(':')[0]
             )
         else:
+            ports = json.loads(create[1])['HostConfig']['PortBindings'].values()
             entry = DockerChallengeTracker(
                 team_id=session.id if is_teams_mode() else None,
                 user_id=session.id if not is_teams_mode() else None,
@@ -672,7 +678,8 @@ class DockerStatus(Resource):
                 'timestamp': i.timestamp,
                 'revert_time': i.revert_time,
                 'instance_id': i.instance_id,
-                'ports': i.ports.split(','),
+                'ports': i.ports,
+                'subdomains': i.subdomains,
                 'host': str(docker.hostname).split(':')[0]
             })
         return {
